@@ -1,0 +1,18 @@
+# Clean-room test overlay: no VPN, no published ports (runs beside a live stack).
+#   tests/cleanroom.sh
+services:
+  gluetun:
+    image: alpine:3
+    command: sleep infinity
+    cap_add: !reset []
+    devices: !reset []
+    environment: !reset {}
+    healthcheck: { test: ["CMD", "true"], interval: 5s }
+    ports: !reset []
+  prowlarr: { ports: !reset [] }
+  sonarr: { ports: !reset [] }
+  radarr: { ports: !reset [] }
+  bazarr: { ports: !reset [] }
+  plex: { ports: !reset [] }
+  tautulli: { ports: !reset [] }
+  seerr: { ports: !reset [] }

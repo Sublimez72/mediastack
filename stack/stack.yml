@@ -1,0 +1,137 @@
+# Desired state applied by stack-init on every `docker compose up`.
+# Generic defaults — override any key in local/stack.yml (gitignored).
+# Maps are deep-merged; lists in local/stack.yml replace the list here.
+
+# Shared folder layout inside every container (${MEDIA_ROOT} -> /data).
+# Downloads and media share one mount so imports are hardlinks.
+paths:
+  downloads: /data/downloads
+  movies: /data/movies
+  tv: /data/tv
+
+sonarr:
+  root_folders: [/data/tv]
+  category: tv-sonarr
+  remove_remote_path_mappings: true      # not needed with a single /data mount
+  media_management:
+    copyUsingHardlinks: true
+    downloadPropersAndRepacks: doNotPrefer   # TRaSH: custom formats handle repacks
+    autoUnmonitorPreviouslyDownloadedEpisodes: true
+    deleteEmptyFolders: true
+    createEmptySeriesFolders: false
+    importExtraFiles: false               # Bazarr handles subtitles
+    recycleBin: /data/.recycle/tv
+    recycleBinCleanupDays: 14
+    minimumFreeSpaceWhenImporting: 10240  # MB
+  delay_profile:
+    preferredProtocol: torrent
+
+radarr:
+  root_folders: [/data/movies]
+  category: radarr
+  remove_remote_path_mappings: true
+  media_management:
+    copyUsingHardlinks: true
+    downloadPropersAndRepacks: doNotPrefer
+    autoUnmonitorPreviouslyDownloadedMovies: true
+    deleteEmptyFolders: true
+    createEmptyMovieFolders: false
+    importExtraFiles: false
+    recycleBin: /data/.recycle/movies
+    recycleBinCleanupDays: 14
+    minimumFreeSpaceWhenImporting: 10240
+  delay_profile:
+    preferredProtocol: torrent
+
+qbittorrent:
+  categories:
+    tv-sonarr: /data/downloads/tv-sonarr
+    radarr: /data/downloads/radarr
+  # Any key from qBittorrent's /api/v2/app/preferences
+  preferences:
+    save_path: /data/downloads
+    temp_path_enabled: false
+    auto_tmm_enabled: true               # category decides the folder
+    torrent_changed_tmm_enabled: true
+    save_path_changed_tmm_enabled: true
+    category_changed_tmm_enabled: true
+    # Seed to ratio 2 or 14 days, then stop. Sonarr/Radarr then remove the
+    # torrent + its download copy; the hardlinked library file stays.
+    max_ratio_enabled: true
+    max_ratio: 2
+    max_seeding_time_enabled: true
+    max_seeding_time: 20160              # minutes
+    max_ratio_act: 0                     # 0 = stop torrent
+    queueing_enabled: true
+    max_active_downloads: 5
+    max_active_uploads: 10
+    max_active_torrents: 20
+    dont_count_slow_torrents: true
+    bypass_local_auth: true              # lets gluetun push the forwarded port (localhost only)
+    upnp: false                          # port comes from the VPN, not your router
+
+prowlarr:
+  # No indexers ship with this repo â€” add your own (README > Adding indexers),
+  # either in Prowlarr's web UI or here in local/stack.yml, by the exact name
+  # shown in Prowlarr's "Add Indexer" list:
+  #   indexers:
+  #     - { name: Internet Archive }
+  #     - { name: Some Site, flaresolverr: true }   # for Cloudflare-protected sites
+  # stack-init only adds missing ones; it never removes indexers added in the UI.
+  indexers: []
+
+bazarr:
+  languages: [en]                        # ISO 639-1 codes, first = profile order
+  providers:
+    - opensubtitlescom                   # needs OPENSUBTITLES_* in .env, skipped otherwise
+    - podnapisi
+    - yifysubtitles
+    - tvsubtitles
+    - subdl
+    - animetosho
+  settings:                              # any Bazarr setting as section.key
+    general.use_embedded_subs: true
+    general.adaptive_searching: true
+    general.upgrade_subs: true
+
+plex:
+  libraries:
+    - { name: Movies, type: movie, path: /data/movies }
+    - { name: TV Shows, type: show, path: /data/tv }
+  preferences:
+    # Treat private ranges (incl. Docker's NAT) as LAN: no bandwidth caps or
+    # remote-stream limits for clients in your home.
+    LanNetworks: 10.0.0.0/8,172.16.0.0/12,192.168.0.0/16
+
+# Defaults for new requests. Profile names must exist (recyclarr creates them).
+seerr:
+  radarr:
+    profile: HD Bluray + WEB
+    root_folder: /data/movies
+    minimum_availability: released
+  sonarr:
+    profile: WEB-1080p (Alternative)
+    root_folder: /data/tv
+    anime_profile: "[Anime] Remux-1080p"
+    anime_root_folder: /data/tv
+
+# decluttarr v2 schema (general/jobs). Connection details are filled in by stack-init.
+decluttarr:
+  general:
+    timer: 10                            # minutes between runs
+    log_level: INFO
+  jobs:
+    remove_bad_files:
+    remove_failed_downloads:
+    remove_failed_imports:
+    remove_metadata_missing:
+    remove_missing_files:
+    remove_orphans:
+    remove_slow:
+      min_speed: 10                      # KB/s
+      max_strikes: 10
+    remove_stalled:
+      max_strikes: 3
+    search_unmet_cutoff:
+    search_missing:
+    detect_deletions:

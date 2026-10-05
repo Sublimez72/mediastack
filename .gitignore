@@ -1,0 +1,14 @@
+# secrets + personal settings — never commit
+.env
+local/
+compose.override.yml
+
+# runtime state
+config/
+library/
+backups/
+
+# python
+__pycache__/
+*.pyc
+.cleanroom/

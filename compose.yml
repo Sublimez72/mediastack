@@ -1,0 +1,281 @@
+name: mediastack
+
+x-defaults: &defaults
+  restart: unless-stopped
+  networks: [mediastack]
+
+x-env: &env
+  TZ: ${TZ:-UTC}
+  PUID: ${PUID:-1000}
+  PGID: ${PGID:-1000}
+
+x-stack-init: &stack-init
+  build: ./stack-init
+  image: mediastack/stack-init:local
+  restart: "no"
+  networks: [mediastack]
+  environment:
+    <<: *env
+    ADMIN_USER: ${ADMIN_USER:-admin}
+    ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
+    PLEX_CLAIM: ${PLEX_CLAIM:-}
+    OPENSUBTITLES_USERNAME: ${OPENSUBTITLES_USERNAME:-}
+    OPENSUBTITLES_PASSWORD: ${OPENSUBTITLES_PASSWORD:-}
+    BIND_ADDR: ${BIND_ADDR:-127.0.0.1}
+  volumes:
+    - ./config:/config
+    - ./stack:/stack:ro
+    - ./local:/local:ro
+    - ${MEDIA_ROOT:-./library}:/data
+    - plex_config:/plex:ro
+
+services:
+  # ---------------------------------------------------------------- bootstrap
+  # Runs before anything else: creates folders, the shared admin login and
+  # qBittorrent's first config. Exits when done.
+  stack-prep:
+    <<: *stack-init
+    command: prep
+
+  # Runs once the apps are up: discovers API keys and wires every app together
+  # from stack/stack.yml (+ local/stack.yml). Idempotent; exits when done.
+  # Preview changes:  docker compose run --rm stack-init apply --dry-run
+  stack-init:
+    <<: *stack-init
+    command: apply
+    depends_on:
+      stack-prep: { condition: service_completed_successfully }
+      sonarr: { condition: service_healthy }
+      radarr: { condition: service_healthy }
+      prowlarr: { condition: service_healthy }
+      bazarr: { condition: service_healthy }
+      seerr: { condition: service_started }
+      plex: { condition: service_started }
+      flaresolverr: { condition: service_started }
+
+  # ---------------------------------------------------------------- downloads
+  gluetun:
+    <<: *defaults
+    image: qmcgaw/gluetun:v3
+    cap_add: [NET_ADMIN]
+    devices: [/dev/net/tun:/dev/net/tun]
+    environment:
+      TZ: ${TZ:-UTC}
+      VPN_SERVICE_PROVIDER: ${VPN_SERVICE_PROVIDER:?set VPN_SERVICE_PROVIDER in .env}
+      VPN_TYPE: wireguard
+      WIREGUARD_PRIVATE_KEY: ${WIREGUARD_PRIVATE_KEY:?set WIREGUARD_PRIVATE_KEY in .env}
+      WIREGUARD_ADDRESSES: ${WIREGUARD_ADDRESSES:-}
+      SERVER_COUNTRIES: ${VPN_SERVER_COUNTRIES:-}
+      VPN_PORT_FORWARDING: ${VPN_PORT_FORWARDING:-off}
+      PORT_FORWARD_ONLY: ${VPN_PORT_FORWARD_ONLY:-}
+      # Push the forwarded port into qBittorrent (localhost auth bypass is only
+      # reachable from inside this network namespace).
+      VPN_PORT_FORWARDING_UP_COMMAND: >-
+        /bin/sh -c 'wget -O- -q --retry-connrefused --post-data
+        "json={\"listen_port\":{{PORTS}}}"
+        http://127.0.0.1:8080/api/v2/app/setPreferences'
+    ports:
+      - ${BIND_ADDR:-127.0.0.1}:8080:8080   # qBittorrent web UI
+
+  qbittorrent:
+    image: lscr.io/linuxserver/qbittorrent:latest
+    restart: unless-stopped
+    network_mode: service:gluetun          # no VPN = no internet
+    environment:
+      <<: *env
+      WEBUI_PORT: 8080
+    volumes:
+      - ./config/qbittorrent:/config
+      - ${MEDIA_ROOT:-./library}:/data
+    depends_on:
+      gluetun: { condition: service_healthy }
+      stack-prep: { condition: service_completed_successfully }
+
+  prowlarr:
+    <<: *defaults
+    image: lscr.io/linuxserver/prowlarr:latest
+    environment:
+      <<: *env
+      PROWLARR__AUTH__METHOD: Forms
+      PROWLARR__AUTH__REQUIRED: Enabled
+    volumes:
+      - ./config/prowlarr:/config
+    ports:
+      - ${BIND_ADDR:-127.0.0.1}:9696:9696
+    healthcheck:
+      test: curl -fsS http://localhost:9696/ping
+      interval: 10s
+      retries: 30
+    depends_on:
+      stack-prep: { condition: service_completed_successfully }
+
+  flaresolverr:
+    <<: *defaults
+    image: ghcr.io/flaresolverr/flaresolverr:latest
+    environment:
+      TZ: ${TZ:-UTC}
+
+  # --------------------------------------------------------------------- arrs
+  sonarr:
+    <<: *defaults
+    image: lscr.io/linuxserver/sonarr:latest
+    environment:
+      <<: *env
+      SONARR__AUTH__METHOD: Forms
+      SONARR__AUTH__REQUIRED: Enabled
+    volumes:
+      - ./config/sonarr:/config
+      - ${MEDIA_ROOT:-./library}:/data
+    ports:
+      - ${BIND_ADDR:-127.0.0.1}:8989:8989
+    healthcheck:
+      test: curl -fsS http://localhost:8989/ping
+      interval: 10s
+      retries: 30
+    depends_on:
+      stack-prep: { condition: service_completed_successfully }
+
+  radarr:
+    <<: *defaults
+    image: lscr.io/linuxserver/radarr:latest
+    environment:
+      <<: *env
+      RADARR__AUTH__METHOD: Forms
+      RADARR__AUTH__REQUIRED: Enabled
+    volumes:
+      - ./config/radarr:/config
+      - ${MEDIA_ROOT:-./library}:/data
+    ports:
+      - ${BIND_ADDR:-127.0.0.1}:7878:7878
+    healthcheck:
+      test: curl -fsS http://localhost:7878/ping
+      interval: 10s
+      retries: 30
+    depends_on:
+      stack-prep: { condition: service_completed_successfully }
+
+  bazarr:
+    <<: *defaults
+    image: lscr.io/linuxserver/bazarr:latest
+    environment: *env
+    volumes:
+      - ./config/bazarr:/config
+      - ${MEDIA_ROOT:-./library}:/data
+    ports:
+      - ${BIND_ADDR:-127.0.0.1}:6767:6767
+    healthcheck:
+      test: curl -fsS -o /dev/null http://localhost:6767/
+      interval: 10s
+      retries: 30
+    depends_on:
+      stack-prep: { condition: service_completed_successfully }
+
+  # Keeps quality profiles / custom formats in sync with TRaSH guides daily.
+  # stack-init also runs it once on every `up`.
+  recyclarr:
+    <<: *defaults
+    image: ghcr.io/recyclarr/recyclarr:8
+    user: ${PUID:-1000}:${PGID:-1000}
+    security_opt: ["no-new-privileges:true"]
+    environment:
+      TZ: ${TZ:-UTC}
+    volumes:
+      - ./config/recyclarr:/config
+      - ${RECYCLARR_CONFIG:-./stack/recyclarr.yml}:/config/recyclarr.yml:ro
+    depends_on:
+      stack-init: { condition: service_completed_successfully }
+
+  # Clears stalled / failed / slow downloads out of the Sonarr/Radarr queues.
+  decluttarr:
+    <<: *defaults
+    image: ghcr.io/manimatter/decluttarr:latest
+    environment:
+      TZ: ${TZ:-UTC}
+    volumes:
+      - ./config/decluttarr:/app/config
+      - ${MEDIA_ROOT:-./library}:/data
+    depends_on:
+      stack-init: { condition: service_completed_successfully }
+
+  # -------------------------------------------------------------------- plex
+  plex:
+    <<: *defaults
+    image: plexinc/pms-docker:latest
+    environment:
+      TZ: ${TZ:-UTC}
+      PLEX_UID: ${PUID:-1000}
+      PLEX_GID: ${PGID:-1000}
+      PLEX_CLAIM: ${PLEX_CLAIM:-}
+      ADVERTISE_IP: ${PLEX_ADVERTISE_URL:-}
+    volumes:
+      - plex_config:/config        # named volume: Plex's SQLite DB is unsafe on Windows bind mounts
+      - ${MEDIA_ROOT:-./library}:/data
+    tmpfs:
+      - /transcode
+    ports:
+      - 32400:32400
+
+  tautulli:
+    <<: *defaults
+    image: tautulli/tautulli:latest
+    environment: *env
+    volumes:
+      - ./config/tautulli:/config
+    ports:
+      - ${BIND_ADDR:-127.0.0.1}:8181:8181
+    depends_on:
+      stack-init: { condition: service_completed_successfully }
+
+  seerr:
+    <<: *defaults
+    image: ghcr.io/seerr-team/seerr:latest
+    init: true
+    environment:
+      TZ: ${TZ:-UTC}
+    volumes:
+      - ./config/seerr:/app/config
+    ports:
+      - ${BIND_ADDR:-127.0.0.1}:5055:5055
+    # "healthy" = setup finished (admin exists). Remote access waits for this,
+    # so an unconfigured Seerr is never reachable from the internet.
+    healthcheck:
+      test: wget -qO- http://localhost:5055/api/v1/settings/public | grep -q '"initialized":true'
+      interval: 15s
+      start_period: 30s
+      retries: 3
+    depends_on:
+      stack-prep: { condition: service_completed_successfully }
+
+  # ---------------------------------------------------------- remote access
+  tailscale:
+    <<: *defaults
+    profiles: [tailscale]
+    image: tailscale/tailscale:latest
+    hostname: ${TS_HOSTNAME:-mediastack}
+    environment:
+      TS_AUTHKEY: ${TS_AUTHKEY:-}
+      TS_HOSTNAME: ${TS_HOSTNAME:-mediastack}
+      TS_STATE_DIR: /var/lib/tailscale
+      TS_USERSPACE: "true"
+      TS_SERVE_CONFIG: /serve/serve.json
+    volumes:
+      - ./config/tailscale:/var/lib/tailscale
+      - ./stack/tailscale-serve.json:/serve/serve.json:ro
+    depends_on:
+      seerr: { condition: service_healthy }
+
+  cloudflared:
+    <<: *defaults
+    profiles: [cloudflare]
+    image: cloudflare/cloudflared:latest
+    command: tunnel --no-autoupdate run
+    environment:
+      TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN:-}
+    depends_on:
+      seerr: { condition: service_healthy }
+
+networks:
+  mediastack:
+
+volumes:
+  plex_config:

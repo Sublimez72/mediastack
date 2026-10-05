@@ -1,0 +1,14 @@
+# Plex hardware transcoding on NVIDIA (needs Plex Pass + NVIDIA Container Toolkit;
+# on Windows, Docker Desktop's WSL2 backend provides it).
+services:
+  plex:
+    environment:
+      NVIDIA_VISIBLE_DEVICES: all
+      NVIDIA_DRIVER_CAPABILITIES: all
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu, video, compute, utility]

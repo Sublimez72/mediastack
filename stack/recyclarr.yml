@@ -1,0 +1,59 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/recyclarr/recyclarr/master/schemas/config-schema.json
+#
+# TRaSH-guide quality profiles. API keys come from secrets.yml, which
+# stack-init writes — nothing to fill in here.
+# To customise: copy to local/recyclarr.yml and set RECYCLARR_CONFIG=./local/recyclarr.yml
+# Profile names here must match `seerr:` in stack/stack.yml.
+
+sonarr:
+  sonarr:
+    base_url: http://sonarr:8989
+    api_key: !secret sonarr_api_key
+    delete_old_custom_formats: true
+
+    quality_definition:
+      type: series
+
+    media_naming:
+      series: plex-tvdb
+      season: default
+      episodes:
+        rename: true
+        standard: default
+        daily: default
+        anime: default
+
+    quality_profiles:
+      # WEB-DL 1080p, upgrades to Bluray 1080p. Sensible size per episode.
+      - trash_id: 9d142234e45d6143785ac55f5a9e8dc9  # WEB-1080p (Alternative)
+        reset_unmatched_scores:
+          enabled: true
+      # Anime: dual audio / fansub tiers, up to Remux 1080p
+      - trash_id: 20e0fc959f1f1704bed501f23bdae76f  # [Anime] Remux-1080p
+        reset_unmatched_scores:
+          enabled: true
+
+radarr:
+  radarr:
+    base_url: http://radarr:7878
+    api_key: !secret radarr_api_key
+    delete_old_custom_formats: true
+
+    quality_definition:
+      type: movie
+
+    media_naming:
+      folder: plex-tmdb
+      movie:
+        rename: true
+        standard: plex-tmdb
+
+    quality_profiles:
+      # 1080p WEB-DL / Bluray encodes. Good quality without eating disks.
+      - trash_id: d1d67249d3890e49bc12e275d989a7e9  # HD Bluray + WEB
+        reset_unmatched_scores:
+          enabled: true
+      # 4K remux/WEB with 1080p fallback. Big files — opt in per movie.
+      - trash_id: fd161a61e3ab826d3a22d53f935696dd  # Remux + WEB 2160p
+        reset_unmatched_scores:
+          enabled: true

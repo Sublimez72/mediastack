@@ -1,0 +1,5 @@
+# Plex hardware transcoding on Intel Quick Sync / AMD VAAPI (Linux hosts; needs Plex Pass).
+services:
+  plex:
+    devices:
+      - /dev/dri:/dev/dri

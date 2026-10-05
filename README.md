@@ -18,24 +18,86 @@ Plex + the *arr stack in one `docker compose up`. Everything is already wired to
 
 ## Quick start
 
-You need Docker (Docker Desktop on Windows/macOS, or Docker Engine + compose plugin on Linux) and a VPN that
-supports WireGuard ([supported providers](https://github.com/qdm12/gluetun-wiki/tree/main/setup/providers)).
+### What you need
+
+- **Docker:** [Docker Desktop](https://www.docker.com/products/docker-desktop/) on Windows/macOS, or Docker Engine + the compose plugin on Linux.
+- **A VPN subscription with WireGuard**, for example ProtonVPN, Mullvad, AirVPN, Surfshark, Windscribe or IVPN ([full list](https://github.com/qdm12/gluetun-wiki/tree/main/setup/providers)).
+- **A free Plex account.**
+- **Access to this repo.** It's private, so accept the GitHub invite first.
+
+### 1. Download the stack
 
 ```bash
-git clone <this repo> mediastack && cd mediastack
-cp .env.example .env        # fill in the 3 required lines
+git clone https://github.com/Sublimez72/mediastack.git
+cd mediastack
+```
+
+### 2. Create your `.env` file
+
+Copy the example file. On Linux/macOS:
+
+```bash
+cp .env.example .env
+```
+
+On Windows (PowerShell):
+
+```powershell
+Copy-Item .env.example .env
+```
+
+### 3. Fill in the 3 required lines
+
+Open `.env` in any text editor. The top of the file has the 3 lines you must fill in. When filled in, they look like this. The `x`s stand in for your own values; the lengths are real.
+
+```ini
+VPN_SERVICE_PROVIDER=protonvpn
+WIREGUARD_PRIVATE_KEY=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx=
+PLEX_CLAIM=claim-xxxxxxxxxxxxxxxxxxxx
+```
+
+Rules for every line in `.env`:
+- Use the format `NAME=value`.
+- Don't put spaces around the `=`.
+- Don't use quotes.
+
+What goes in each line:
+
+- **`VPN_SERVICE_PROVIDER`:** your VPN company, in lowercase. Examples: `protonvpn`, `mullvad`, `airvpn`, `surfshark`, `windscribe`, `ivpn`. Use the exact spelling from the [provider list](https://github.com/qdm12/gluetun-wiki/tree/main/setup/providers).
+- **`WIREGUARD_PRIVATE_KEY`:** from a WireGuard config file you download from your VPN account.
+  - **ProtonVPN:** account.protonvpn.com → Downloads → WireGuard configuration. Platform: Router, NAT-PMP on if you want port forwarding.
+  - **Mullvad:** mullvad.net → Account → WireGuard configuration.
+
+  Open the downloaded `.conf` file in a text editor and copy the value after `PrivateKey = `. It's 44 characters and ends with `=`.
+
+  Some providers also need lines from that same file (copy their values the same way):
+  - **Mullvad, AirVPN, Surfshark, Windscribe, IVPN:** also add the `Address` value, e.g. `WIREGUARD_ADDRESSES=10.64.222.21/32`.
+  - **AirVPN, Windscribe:** also add the `PresharedKey` value as `WIREGUARD_PRESHARED_KEY=...`.
+- **`PLEX_CLAIM`:** sign in at <https://plex.tv/claim> and copy the code that starts with `claim-`.
+  - **It expires after 4 minutes, so do this last**, right before step 4.
+  - It's only needed the first time, while your new Plex server links to your account.
+
+Everything else in `.env` is optional and commented out (`#`). You can leave it alone.
+
+### 4. Start it
+
+```bash
 docker compose up -d
 ```
 
-The 3 required lines:
+The first start downloads everything and takes about 5–10 minutes. When the command finishes, see what was set up:
 
-- `VPN_SERVICE_PROVIDER` + `WIREGUARD_PRIVATE_KEY`, from your VPN account's WireGuard config.
-- `PLEX_CLAIM`, from <https://plex.tv/claim>. It expires after 4 minutes, so grab it right before `up`.
+```bash
+docker compose logs stack-init
+```
 
-The first start takes a few minutes. When it's done, `docker compose logs stack-init` ends with a list of URLs.
-**Your login for every web UI is in `config/stack/credentials.env`.** Set `ADMIN_PASSWORD` in `.env` if you'd rather pick it yourself.
+The log ends with a list of web addresses.
 
-Open Seerr at <http://localhost:5055> and sign in with Plex. That's it.
+### 5. Log in
+
+- **Your username and password for every web UI** (Sonarr, Radarr, qBittorrent…) are in `config/stack/credentials.env`. Prefer your own password? Add `ADMIN_PASSWORD=yourpassword` to `.env` and run `docker compose up -d` again.
+- **To request stuff:** open Seerr at <http://localhost:5055> and sign in with Plex.
+- **To watch:** use any Plex app or <https://app.plex.tv>.
 
 ## How it fits together
 
@@ -98,7 +160,7 @@ Settings you change in an app's UI stay as they are, unless `stack.yml` manages 
 Pick one, or none. The tunnel only starts once Seerr is fully set up, so a half-configured Seerr is never on the internet.
 
 - **Tailscale.** Free, no domain, opens no ports.
-  - Only people you invite to your tailnet can reach Seerr, at `https://mediastack.<your-tailnet>.ts.net`.
+  - Only people you invite to your tailnet can reach Seerr. The address appears in the Tailscale admin console under Machines, e.g. `https://mediastack.tail1a2b3c.ts.net`.
   - Set `COMPOSE_PROFILES=tailscale` and `TS_AUTHKEY` (from the [Tailscale admin console](https://login.tailscale.com/admin/settings/keys)).
 - **Cloudflare Tunnel.** A public URL on your own domain. The tunnel is free; the domain is not (Cloudflare's no-domain "quick tunnels" change URL on every restart).
   - Create a tunnel in Zero Trust → Networks → Tunnels and point its public hostname at `http://seerr:5055`.
@@ -139,6 +201,6 @@ Seerr, Tautulli and Plex stop for a few seconds during the copy, so their databa
 - **What did setup do / what failed?** `docker compose logs stack-init`. Fix the cause, then `docker compose up -d` to re-run it.
 - **qBittorrent unreachable.** The VPN isn't up: check `docker compose logs gluetun`.
 - **Seerr shows "unhealthy".** Setup is waiting for Plex. Check that `PLEX_CLAIM` was fresh, then `docker compose up -d`.
-- **Plex streams through the relay at home.** Set `PLEX_ADVERTISE_URL=http://<your-LAN-IP>:32400`.
+- **Plex streams through the relay at home.** Add your computer's LAN address to `.env`, e.g. `PLEX_ADVERTISE_URL=http://192.168.1.50:32400`. Find it with `ipconfig` (Windows) or `ip addr` (Linux): it's the `192.168.x.x` or `10.x.x.x` address.
 - **An indexer couldn't be added.** The site is down or blocked on your network. It's retried on every run; remove it from `local/stack.yml` to stop trying.
 - **Test the whole thing from scratch:** `tests/cleanroom.sh`. It uses a fake VPN and no published ports, so it can run beside a live stack.

@@ -22,7 +22,8 @@ Plex + the *arr stack in one `docker compose up`. Everything is already wired to
 
 - **Docker:** [Docker Desktop](https://www.docker.com/products/docker-desktop/) on Windows/macOS, or Docker Engine + the compose plugin on Linux.
 - **A VPN subscription with WireGuard**, for example ProtonVPN, Mullvad, AirVPN, Surfshark, Windscribe or IVPN ([full list](https://github.com/qdm12/gluetun-wiki/tree/main/setup/providers)).
-- **A free Plex account.**
+- **A Plex account with [Plex Pass](https://www.plex.tv/plex-pass/).** Plex Pass is what unlocks hardware transcoding. A free account works too, but then Plex transcodes on the CPU only.
+- **A GPU Plex can use:** an NVIDIA card (Windows or Linux), or Intel / AMD graphics (Linux only). See [Hardware transcoding](#hardware-transcoding) for the one-time driver setup, and do it before step 5.
 - **Access to this repo.** It's private, so accept the GitHub invite first.
 
 ### 1. Download the stack
@@ -79,7 +80,18 @@ What goes in each line:
 
 Everything else in `.env` is optional and commented out (`#`). You can leave it alone.
 
-### 4. Start it
+### 4. Turn on your GPU
+
+Add one more line to `.env` for your graphics hardware. Pick the line that matches your GPU and operating system:
+
+| GPU | Windows | Linux |
+|---|---|---|
+| NVIDIA | `COMPOSE_FILE=compose.yml;compose.gpu-nvidia.yml` | `COMPOSE_FILE=compose.yml:compose.gpu-nvidia.yml` |
+| Intel / AMD | not supported by Docker Desktop, skip this step | `COMPOSE_FILE=compose.yml:compose.gpu-intel.yml` |
+
+Windows uses `;` between the file names; Linux uses `:`. On macOS, skip this step: Docker can't pass a GPU through there.
+
+### 5. Start it
 
 ```bash
 docker compose up -d
@@ -93,7 +105,7 @@ docker compose logs stack-init
 
 The log ends with a list of web addresses.
 
-### 5. Log in
+### 6. Log in
 
 - **Your username and password for every web UI** (Sonarr, Radarr, qBittorrent…) are in `config/stack/credentials.env`. Prefer your own password? Add `ADMIN_PASSWORD=yourpassword` to `.env` and run `docker compose up -d` again.
 - **To request stuff:** open Seerr at <http://localhost:5055> and sign in with Plex.
@@ -175,14 +187,62 @@ Pick one, or none. The tunnel only starts once Seerr is fully set up, so a half-
 - No container gets the Docker socket.
 - Secrets live only in `.env` and `config/`, both gitignored. To block accidental commits: `pip install pre-commit && pre-commit install`, which runs gitleaks on every commit.
 
-## Hardware transcoding (optional, needs Plex Pass)
+## Hardware transcoding
 
-Add an override to `COMPOSE_FILE` in `.env`:
+When a device can't play a file as-is (a phone on mobile data, a TV that doesn't support the format, a friend on slow internet), Plex converts it on the fly. On the CPU, a single 4K conversion can max out a weaker machine. A GPU's video hardware handles several at once with almost no load.
 
-- NVIDIA: `compose.gpu-nvidia.yml`. Needs the NVIDIA Container Toolkit; Docker Desktop on Windows includes it.
-- Intel / AMD on Linux: `compose.gpu-intel.yml`.
+### One-time setup on your computer
 
-Then enable *Use hardware acceleration* in Plex → Settings → Transcoder.
+Do this before your first `docker compose up -d`.
+
+**NVIDIA on Windows**
+1. Install the latest [NVIDIA driver](https://www.nvidia.com/Download/index.aspx) (the normal GeForce / Studio driver).
+2. In Docker Desktop → Settings → General, leave *Use the WSL 2 based engine* ticked (the default).
+
+Docker Desktop has NVIDIA support built in, so there's nothing else to install.
+
+**NVIDIA on Linux**
+1. Install the NVIDIA driver from your distro (for example `sudo ubuntu-drivers install` on Ubuntu), then reboot.
+2. Install the [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html), then connect it to Docker:
+   ```bash
+   sudo nvidia-ctk runtime configure --runtime=docker
+   ```
+   ```bash
+   sudo systemctl restart docker
+   ```
+3. Check that Docker can see the card. It should print your GPU's name:
+   ```bash
+   docker run --rm --gpus all ubuntu nvidia-smi -L
+   ```
+
+**Intel / AMD on Linux**
+1. Check that the GPU device exists. It should list `renderD128`:
+   ```bash
+   ls /dev/dri
+   ```
+   If it doesn't, install your distro's Intel or AMD graphics drivers (on Ubuntu, `intel-media-va-driver-non-free` for Intel), then reboot.
+
+No permission setup is needed: the Plex container gives itself access to the device on start.
+
+### In the stack
+
+- Add the matching `COMPOSE_FILE` line to `.env` (Quick start step 4).
+- Plex's *Use hardware acceleration when available* and *Use hardware-accelerated video encoding* are switched on by stack-init. You don't need to touch Plex's settings.
+
+If you add the GPU line after the stack is already running, apply it with:
+
+```bash
+docker compose up -d
+```
+
+### Check it's working
+
+1. Open any movie in Plex, then in the player pick a lower quality (for example *720p*). That forces a transcode.
+2. In Plex Web, open Settings → Dashboard (top right, the activity icon).
+3. The stream should say **Transcode (hw)**. If it says *Transcode* without *(hw)*, the GPU isn't being used:
+   - **No Plex Pass on the account that owns the server.** Without it, Plex always uses the CPU.
+   - **`COMPOSE_FILE` line missing or with the wrong separator** (`;` on Windows, `:` on Linux). To check, run `docker compose config` and look for a `devices:` section under `plex:`.
+   - **NVIDIA on Linux:** the `nvidia-smi -L` check above fails, so the Container Toolkit isn't set up.
 
 ## Backups
 

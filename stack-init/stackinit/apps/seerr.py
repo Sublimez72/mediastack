@@ -98,7 +98,7 @@ def _arr(ctx, api, app):
         drift = {k: v for k, v in want.items() if k != "name" and match.get(k) != v}
         if not drift:
             return
-        merged = match | drift
+        merged = {k: v for k, v in match.items() if k != "id"} | drift   # Seerr rejects a body with "id"
         shown = ", ".join(f"{k}={'***' if k == 'apiKey' else v}" for k, v in drift.items())
         ctx.apply(f"seerr: {app} server {shown}", lambda: api.put(f"/settings/{app}/{match['id']}", json=merged))
     else:

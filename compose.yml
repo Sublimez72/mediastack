@@ -12,7 +12,7 @@ x-env: &env
 x-stack-init: &stack-init
   build: ./stack-init
   image: mediastack/stack-init:local
-  pull_policy: build        # local image: `docker compose pull` skips it, `up` builds it
+  pull_policy: never        # built locally: `pull` skips it, `up` builds it if missing (rebuild: `docker compose build`)
   restart: "no"
   networks: [mediastack]
   environment:

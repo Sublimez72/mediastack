@@ -163,6 +163,28 @@ The log ends with a list of web addresses. After the first start, the claim code
 
 Torrents seed to ratio 2 or 14 days, then Sonarr/Radarr remove the download copy. The library file stays, because it's a hardlink.
 
+## Updating
+
+Get the latest version of this repo and of every app:
+
+```bash
+git pull
+```
+
+```bash
+docker compose pull
+```
+
+```bash
+docker compose build
+```
+
+```bash
+docker compose up -d
+```
+
+Your settings, library and history are kept. stack-init runs again and only fixes anything that drifted.
+
 ## Customising
 
 Don't edit the committed files. Put your overrides in **`local/`**, which is gitignored:

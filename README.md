@@ -24,7 +24,7 @@ Plex + the *arr stack in one `docker compose up`. Everything is already wired to
 - **A VPN subscription with WireGuard**, for example ProtonVPN, Mullvad, AirVPN, Surfshark, Windscribe or IVPN ([full list](https://github.com/qdm12/gluetun-wiki/tree/main/setup/providers)).
 - **A Plex account with [Plex Pass](https://www.plex.tv/plex-pass/).** Plex Pass is what unlocks hardware transcoding. A free account works too, but then Plex transcodes on the CPU only.
 - **A GPU Plex can use:** an NVIDIA card (Windows or Linux), or Intel / AMD graphics (Linux only). See [Hardware transcoding](#hardware-transcoding) for the one-time driver setup, and do it before step 5.
-- **Access to this repo.** It's private, so accept the GitHub invite first.
+- **Git**, to download this repo ([Git for Windows](https://git-scm.com/download/win); usually preinstalled on Linux/macOS).
 
 ### 1. Download the stack
 

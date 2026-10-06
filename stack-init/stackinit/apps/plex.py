@@ -53,7 +53,8 @@ def configure(ctx: Ctx):
         ctx.apply(f"plex: library '{lib['name']}' -> {lib['path']}",
                   lambda p=params: api.post("/library/sections", params=p))
 
-    want = ctx.cfg["plex"].get("preferences", {})
+    want = dict(ctx.cfg["plex"].get("preferences", {}))
+    want["FriendlyName"] = os.environ.get("PLEX_SERVER_NAME") or "mediastack"
     if want:
         cur = {s["id"]: s.get("value") for s in api.get("/:/prefs")["MediaContainer"].get("Setting", [])}
         drift = {k: v for k, v in want.items() if str(cur.get(k)) != str(v)}

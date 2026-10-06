@@ -47,14 +47,15 @@ On Windows (PowerShell):
 Copy-Item .env.example .env
 ```
 
-### 3. Fill in the 3 required lines
+### 3. Fill in your VPN details
 
-Open `.env` in any text editor. The top of the file has the 3 lines you must fill in. When filled in, they look like this. The `x`s stand in for your own values; the lengths are real.
+Open `.env` in any text editor. Fill in the two VPN lines at the top. Leave `PLEX_CLAIM` empty for now: it comes in step 6.
+
+When filled in, they look like this. The `x`s stand in for your own values; the lengths are real.
 
 ```ini
 VPN_SERVICE_PROVIDER=protonvpn
 WIREGUARD_PRIVATE_KEY=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx=
-PLEX_CLAIM=claim-xxxxxxxxxxxxxxxxxxxx
 ```
 
 Rules for every line in `.env`:
@@ -65,7 +66,7 @@ Rules for every line in `.env`:
 What goes in each line:
 
 - **`VPN_SERVICE_PROVIDER`:** your VPN company, in lowercase. Examples: `protonvpn`, `mullvad`, `airvpn`, `surfshark`, `windscribe`, `ivpn`. Use the exact spelling from the [provider list](https://github.com/qdm12/gluetun-wiki/tree/main/setup/providers).
-- **`WIREGUARD_PRIVATE_KEY`:** from a WireGuard config file you download from your VPN account.
+- **`WIREGUARD_PRIVATE_KEY`:** from a WireGuard config file you download from your VPN account. Create a new config just for this server; don't reuse one that's already connected somewhere else.
   - **ProtonVPN:** account.protonvpn.com → Downloads → WireGuard configuration. Platform: Router, NAT-PMP on if you want port forwarding.
   - **Mullvad:** mullvad.net → Account → WireGuard configuration.
 
@@ -74,9 +75,12 @@ What goes in each line:
   Some providers also need lines from that same file (copy their values the same way):
   - **Mullvad, AirVPN, Surfshark, Windscribe, IVPN:** also add the `Address` value, e.g. `WIREGUARD_ADDRESSES=10.64.222.21/32`.
   - **AirVPN, Windscribe:** also add the `PresharedKey` value as `WIREGUARD_PRESHARED_KEY=...`.
-- **`PLEX_CLAIM`:** sign in at <https://plex.tv/claim> and copy the code that starts with `claim-`.
-  - **It expires after 4 minutes, so do this last**, right before step 4.
-  - It's only needed the first time, while your new Plex server links to your account.
+
+**Optional: name your Plex server.** Friends see this name in their Plex apps. It defaults to `mediastack`. To pick your own, add a line like this (spaces are fine here, but no quotes). You can change it any time; it applies on the next `docker compose up -d`.
+
+```ini
+PLEX_SERVER_NAME=Movie Night
+```
 
 Everything else in `.env` is optional and commented out (`#`). You can leave it alone.
 
@@ -91,25 +95,47 @@ Add one more line to `.env` for your graphics hardware. Pick the line that match
 
 Windows uses `;` between the file names; Linux uses `:`. On macOS, skip this step: Docker can't pass a GPU through there.
 
-### 5. Start it
+### 5. Download everything
+
+This downloads all the apps (a few GB) and takes about 5–10 minutes. Doing it before the Plex step matters: the claim code in step 6 expires after 4 minutes.
 
 ```bash
-docker compose up -d
+docker compose pull
 ```
 
-The first start downloads everything and takes about 5–10 minutes. When the command finishes, see what was set up:
+```bash
+docker compose build
+```
+
+### 6. Claim your Plex server and start
+
+Do these three things in one go, without a break:
+
+1. Sign in at <https://plex.tv/claim> and copy the code that starts with `claim-`.
+2. Paste it into `.env` after `PLEX_CLAIM=`, and save:
+   ```ini
+   PLEX_CLAIM=claim-xxxxxxxxxxxxxxxxxxxx
+   ```
+3. Start the stack:
+   ```bash
+   docker compose up -d
+   ```
+
+Plex uses the code within seconds of starting. Missed the 4 minutes? See [Troubleshooting](#troubleshooting).
+
+Setup finishes in a few minutes. See what was set up:
 
 ```bash
 docker compose logs stack-init
 ```
 
-The log ends with a list of web addresses.
+The log ends with a list of web addresses. After the first start, the claim code is no longer needed. You can leave it in `.env` or delete the line.
 
-### 6. Log in
+### 7. Log in
 
 - **Your username and password for every web UI** (Sonarr, Radarr, qBittorrent…) are in `config/stack/credentials.env`. Prefer your own password? Add `ADMIN_PASSWORD=yourpassword` to `.env` and run `docker compose up -d` again.
 - **To request stuff:** open Seerr at <http://localhost:5055> and sign in with Plex.
-- **To watch:** use any Plex app or <https://app.plex.tv>.
+- **To watch:** use any Plex app or <https://app.plex.tv>. Your server shows up under the name from `PLEX_SERVER_NAME` (default `mediastack`).
 
 ## How it fits together
 
@@ -260,7 +286,19 @@ Seerr, Tautulli and Plex stop for a few seconds during the copy, so their databa
 
 - **What did setup do / what failed?** `docker compose logs stack-init`. Fix the cause, then `docker compose up -d` to re-run it.
 - **qBittorrent unreachable.** The VPN isn't up: check `docker compose logs gluetun`.
-- **Seerr shows "unhealthy".** Setup is waiting for Plex. Check that `PLEX_CLAIM` was fresh, then `docker compose up -d`.
+- **The Plex claim code expired** (Seerr shows "unhealthy", and the stack-init log says Plex is not claimed). Plex only tries the code once, when its container is first created. To retry:
+  1. Get a fresh code at <https://plex.tv/claim> and replace the `PLEX_CLAIM=` value in `.env`.
+  2. Straight away, recreate Plex so it tries again:
+     ```bash
+     docker compose up -d --force-recreate plex
+     ```
+  3. Finish the setup. Tautulli has to be stopped for setup to configure it:
+     ```bash
+     docker compose stop tautulli
+     ```
+     ```bash
+     docker compose up -d
+     ```
 - **Plex streams through the relay at home.** Add your computer's LAN address to `.env`, e.g. `PLEX_ADVERTISE_URL=http://192.168.1.50:32400`. Find it with `ipconfig` (Windows) or `ip addr` (Linux): it's the `192.168.x.x` or `10.x.x.x` address.
 - **An indexer couldn't be added.** The site is down or blocked on your network. It's retried on every run; remove it from `local/stack.yml` to stop trying.
 - **Test the whole thing from scratch:** `tests/cleanroom.sh`. It uses a fake VPN and no published ports, so it can run beside a live stack.

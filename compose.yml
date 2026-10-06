@@ -20,6 +20,7 @@ x-stack-init: &stack-init
     ADMIN_USER: ${ADMIN_USER:-admin}
     ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
     PLEX_CLAIM: ${PLEX_CLAIM:-}
+    PLEX_SERVER_NAME: ${PLEX_SERVER_NAME:-mediastack}
     OPENSUBTITLES_USERNAME: ${OPENSUBTITLES_USERNAME:-}
     OPENSUBTITLES_PASSWORD: ${OPENSUBTITLES_PASSWORD:-}
     BIND_ADDR: ${BIND_ADDR:-127.0.0.1}
@@ -205,7 +206,7 @@ services:
   plex:
     <<: *defaults
     image: plexinc/pms-docker:latest
-    hostname: ${PLEX_SERVER_NAME:-mediastack}   # the server name shown in Plex apps
+    hostname: mediastack       # display name is set by stack-init from PLEX_SERVER_NAME
     environment:
       TZ: ${TZ:-UTC}
       PLEX_UID: ${PUID:-1000}

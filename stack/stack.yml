@@ -101,7 +101,7 @@ plex:
   preferences:
     # Treat private ranges (incl. Docker's NAT) as LAN: no bandwidth caps or
     # remote-stream limits for clients in your home.
-    LanNetworks: 10.0.0.0/8,172.16.0.0/12,192.168.0.0/16
+    LanNetworksBandwidth: 10.0.0.0/8,172.16.0.0/12,192.168.0.0/16
     # Use the GPU for transcoding when one is passed in (compose.gpu-*.yml).
     # Needs Plex Pass; harmless without a GPU.
     HardwareAcceleratedCodecs: true

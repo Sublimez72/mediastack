@@ -12,6 +12,7 @@ x-env: &env
 x-stack-init: &stack-init
   build: ./stack-init
   image: mediastack/stack-init:local
+  pull_policy: build        # local image: `docker compose pull` skips it, `up` builds it
   restart: "no"
   networks: [mediastack]
   environment:
@@ -89,7 +90,9 @@ services:
       - ./config/qbittorrent:/config
       - ${MEDIA_ROOT:-./library}:/data
     depends_on:
-      gluetun: { condition: service_healthy }
+      # restart: true -> qBittorrent is restarted whenever gluetun is, otherwise it
+      # stays attached to the dead network namespace (no internet, unreachable).
+      gluetun: { condition: service_healthy, restart: true }
       stack-prep: { condition: service_completed_successfully }
 
   prowlarr:
@@ -202,6 +205,7 @@ services:
   plex:
     <<: *defaults
     image: plexinc/pms-docker:latest
+    hostname: ${PLEX_SERVER_NAME:-mediastack}   # the server name shown in Plex apps
     environment:
       TZ: ${TZ:-UTC}
       PLEX_UID: ${PUID:-1000}

@@ -71,7 +71,7 @@ qbittorrent:
     upnp: false                          # port comes from the VPN, not your router
 
 prowlarr:
-  # No indexers ship with this repo â€” add your own (README > Adding indexers),
+  # No indexers ship with this repo — add your own (README > Adding indexers),
   # either in Prowlarr's web UI or here in local/stack.yml, by the exact name
   # shown in Prowlarr's "Add Indexer" list:
   #   indexers:

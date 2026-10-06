@@ -137,6 +137,31 @@ The log ends with a list of web addresses. After the first start, the claim code
 - **To request stuff:** open Seerr at <http://localhost:5055> and sign in with Plex.
 - **To watch:** use any Plex app or <https://app.plex.tv>. Your server shows up under the name from `PLEX_SERVER_NAME` (default `mediastack`).
 
+### 8. Add indexers
+
+Indexers are the sites Sonarr and Radarr search for downloads. **None come preinstalled**: you choose your own. You only add them in Prowlarr; it passes them on to Sonarr and Radarr automatically.
+
+1. Open Prowlarr at <http://localhost:9696> and log in (same login as step 7).
+2. Go to **Indexers** → **Add Indexer**.
+3. Search for a site, click it, and click **Save**. Prowlarr tests the connection before saving.
+   - **Public** sites need no account.
+   - **Private** sites need an account there. Prowlarr asks for your API key, or your username and password, for that site.
+4. Repeat for as many as you like. A handful of reliable ones is better than dozens of flaky ones.
+
+Within a minute they appear in Sonarr and Radarr under Settings → Indexers. There's nothing to do there.
+
+**Site behind Cloudflare** (the test fails with a Cloudflare or "challenge" error): open that indexer in Prowlarr, pick `flaresolverr` in the **Tags** field, and save. That sends its traffic through FlareSolverr, which is already set up for you.
+
+**Optional: add them in a file instead.** Indexers added in Prowlarr live in its database, and setup never removes them. If you'd like a fresh install to re-add them automatically, list them in `local/stack.yml` instead. Use the exact name shown in Prowlarr's **Add Indexer** list, and only public sites:
+
+```yaml
+prowlarr:
+  indexers:
+    - { name: Internet Archive }
+```
+
+Add `flaresolverr: true` inside the braces for Cloudflare-protected sites. Then run `docker compose up -d`.
+
 ## How it fits together
 
 ```
@@ -151,7 +176,7 @@ The log ends with a list of web addresses. After the first start, the claim code
 2. The apps start and generate their own API keys.
 3. **`stack-init`** reads those keys from each app's config. It then sets everything through each app's API:
    - **Sonarr/Radarr:** root folders, download client, media management, recycle bin, delay profile and Plex library updates.
-   - **Prowlarr:** sync to Sonarr/Radarr, FlareSolverr and public indexers.
+   - **Prowlarr:** sync to Sonarr/Radarr and FlareSolverr. Indexers are yours to add (Quick start step 8).
    - **qBittorrent:** categories and seeding limits.
    - **Bazarr:** Sonarr/Radarr connections, language profile and providers.
    - **Plex:** libraries.
@@ -322,5 +347,6 @@ Seerr, Tautulli and Plex stop for a few seconds during the copy, so their databa
      docker compose up -d
      ```
 - **Plex streams through the relay at home.** Add your computer's LAN address to `.env`, e.g. `PLEX_ADVERTISE_URL=http://192.168.1.50:32400`. Find it with `ipconfig` (Windows) or `ip addr` (Linux): it's the `192.168.x.x` or `10.x.x.x` address.
-- **An indexer couldn't be added.** The site is down or blocked on your network. It's retried on every run; remove it from `local/stack.yml` to stop trying.
+- **An indexer from `local/stack.yml` couldn't be added.** The site is down or blocked on your network. It's retried on every run; remove it from `local/stack.yml` to stop trying.
+- **Sonarr/Radarr find nothing.** Check that you've added indexers (Quick start step 8), and that Prowlarr → **Indexers** shows them without a red error. In Sonarr/Radarr, Settings → Indexers should list the same ones.
 - **Test the whole thing from scratch:** `tests/cleanroom.sh`. It uses a fake VPN and no published ports, so it can run beside a live stack.

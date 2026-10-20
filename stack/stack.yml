@@ -136,7 +136,7 @@ seerr:
     root_folder: /data/movies
     minimum_availability: released
   sonarr:
-    profile: WEB-1080p (Alternative)
+    profile: WEB-1080p (Alternative)    # or WEB-720p for smaller files
     root_folder: /data/tv
     anime_profile: "[Anime] Remux-1080p"
     anime_root_folder: /data/tv

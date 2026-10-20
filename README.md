@@ -232,6 +232,7 @@ bazarr:
   languages: [en, es]
 seerr:
   radarr: { profile: Remux + WEB 2160p }   # default new movie requests to 4K
+  sonarr: { profile: WEB-720p }            # default new TV requests to 720p
 ```
 
 Preview what a change will do, then apply it:

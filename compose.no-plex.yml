@@ -1,0 +1,9 @@
+# Run without Plex (and Tautulli, which only works with Plex). Use together with
+# COMPOSE_PROFILES=jellyfin, emby or jellyfin,emby. Add it to COMPOSE_FILE, e.g.
+#   COMPOSE_FILE=compose.yml:compose.no-plex.yml        (Linux; use ; on Windows)
+# Your Plex data stays in its volume; remove this file from COMPOSE_FILE to bring it back.
+services:
+  plex:
+    profiles: [plex]
+  tautulli:
+    profiles: [plex]

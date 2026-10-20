@@ -3,7 +3,7 @@ import os
 import time
 import xml.etree.ElementTree as ET
 
-from ..common import PLEX, Api, Ctx, Log
+from ..common import PLEX, Api, Ctx, Log, enabled, server_name
 
 PREFS = PLEX / "Library" / "Application Support" / "Plex Media Server" / "Preferences.xml"
 BASE = "http://plex:32400"
@@ -16,6 +16,9 @@ AGENTS = {
 def discover(ctx: Ctx):
     """Fill ctx.plex from Preferences.xml. Waits for a pending claim to land."""
     Log.section("plex")
+    if not enabled("plex"):
+        Log.info("switched off (compose.no-plex.yml)")
+        return
     deadline = time.time() + (300 if os.environ.get("PLEX_CLAIM") else 20)
     while True:
         attrs = _prefs()
@@ -54,7 +57,7 @@ def configure(ctx: Ctx):
                   lambda p=params: api.post("/library/sections", params=p))
 
     want = dict(ctx.cfg["plex"].get("preferences", {}))
-    want["FriendlyName"] = os.environ.get("PLEX_SERVER_NAME") or "mediastack"
+    want["FriendlyName"] = server_name()
     if want:
         cur = {s["id"]: s.get("value") for s in api.get("/:/prefs")["MediaContainer"].get("Setting", [])}
         drift = {k: v for k, v in want.items() if str(cur.get(k)) != str(v)}

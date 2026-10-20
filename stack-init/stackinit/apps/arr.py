@@ -2,7 +2,7 @@
 import re
 
 from ..common import CONFIG, Api, Ctx, Log, wait_for
-from . import sabnzbd
+from . import jellyfin, sabnzbd
 
 ARRS = {
     "sonarr": {"port": 8989, "api": "v3", "category_field": "tvCategory"},
@@ -154,7 +154,7 @@ def _patch_obj(ctx, app, api, path, current, wanted, label):
               lambda: api.put(target, json=current))
 
 
-# ---------------------------------------------------------- plex connect
+# ------------------------------------------------------ media server connect
 def plex_notification(ctx: Ctx, app: str):
     if not ctx.plex or app not in ctx.keys:
         return
@@ -176,3 +176,29 @@ def plex_notification(ctx: Ctx, app: str):
         method, path, why = "POST", "/notification", "new"
     set_fields(n, want)
     ctx.apply(f"{app}: Plex library-update notification ({why})", lambda: api.req(method, path, json=n))
+
+
+def media_notification(ctx: Ctx, app: str, server: str):
+    """Sonarr/Radarr's built-in 'Emby / Jellyfin' connection, one per server."""
+    if server not in ctx.media or app not in ctx.keys:
+        return
+    api = Api(f"http://{app}:{ARRS[app]['port']}/api/v3", {"X-Api-Key": ctx.keys[app]})
+    want = {"host": server, "port": jellyfin.PORT, "useSsl": False, "apiKey": ctx.media[server]["key"],
+            "updateLibrary": True}
+    existing = [n for n in api.get("/notification")
+                if n["implementation"] == "MediaBrowser" and field_map(n).get("host") == server]
+    if existing:
+        n = existing[0]
+        if not any(differs(field_map(n).get(k), v) for k, v in want.items()):
+            return
+        method, path, why = "PUT", f"/notification/{n['id']}", "update"
+    else:
+        n = next(s for s in api.get("/notification/schema") if s["implementation"] == "MediaBrowser")
+        n["name"] = jellyfin.SERVERS[server]
+        for k in list(n):
+            if k.startswith("supportsOn") and n[k]:
+                n["on" + k.removeprefix("supportsOn")] = True
+        method, path, why = "POST", "/notification", "new"
+    set_fields(n, want)
+    ctx.apply(f"{app}: {jellyfin.SERVERS[server]} library-update notification ({why})",
+              lambda: api.req(method, path, json=n))

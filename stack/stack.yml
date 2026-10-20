@@ -129,8 +129,37 @@ plex:
     HardwareAcceleratedCodecs: true
     HardwareAcceleratedEncoders: true
 
+# Jellyfin and Emby (off unless switched on, see README > Choose your media
+# servers). They share the same folders as Plex and never write into them:
+# metadata and artwork stay in each server's own config.
+jellyfin:
+  libraries:
+    - { name: Movies, type: movie, path: /data/movies }
+    - { name: TV Shows, type: show, path: /data/tv }
+  # Hardware transcoding, applied when a GPU overlay (compose.gpu-*.yml) is in use.
+  # Any key from Jellyfin's Dashboard > Playback > Transcoding (encoding.xml).
+  hardware_acceleration:
+    nvidia:
+      HardwareAccelerationType: nvenc
+      HardwareDecodingCodecs: [h264, hevc, mpeg2video, vc1, vp9]
+      EnableHardwareEncoding: true
+    intel:                               # Intel Quick Sync and AMD, through VAAPI
+      HardwareAccelerationType: vaapi
+      VaapiDevice: /dev/dri/renderD128
+      HardwareDecodingCodecs: [h264, hevc, mpeg2video, vc1, vp9]
+      EnableHardwareEncoding: true
+
+emby:
+  # Hardware transcoding needs Emby Premiere and turns itself on when a GPU is passed in.
+  libraries:
+    - { name: Movies, type: movie, path: /data/movies }
+    - { name: TV Shows, type: show, path: /data/tv }
+
 # Defaults for new requests. Profile names must exist (recyclarr creates them).
 seerr:
+  # Seerr links to ONE media server, picked at its first setup: auto = Plex if
+  # it's switched on, else Jellyfin, else Emby. Or set plex / jellyfin / emby.
+  media_server: auto
   radarr:
     profile: HD Bluray + WEB
     root_folder: /data/movies

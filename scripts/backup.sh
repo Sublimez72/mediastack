@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Snapshot everything settings-as-code can't rebuild: watch/request history,
-# Plex metadata, app databases. Run nightly (cron) — keeps the last $KEEP.
+# Plex/Jellyfin/Emby metadata, app databases. Run nightly (cron) — keeps the last $KEEP.
 #   scripts/backup.sh [backup_dir]        (default: ./backups)
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -19,18 +19,31 @@ latest=$(ls -t config/bazarr/backup/*.zip 2>/dev/null | head -1 || true)
 [ -n "$latest" ] && cp "$latest" "$out/bazarr.zip"
 
 # SQLite apps: copy while briefly stopped so the DB files are consistent
-docker compose stop seerr tautulli >/dev/null
-tar --exclude='seerr/logs' --exclude='seerr/cache' -czf "$out/seerr.tgz" -C config seerr
-tar --exclude='tautulli/logs' --exclude='tautulli/cache' -czf "$out/tautulli.tgz" -C config tautulli
-docker compose start seerr tautulli >/dev/null
+running() { docker compose ps --services --status running 2>/dev/null | grep -qx "$1"; }
+for app in seerr tautulli; do
+  [ -d "config/$app" ] || continue
+  was_running=; running "$app" && was_running=1 && docker compose stop "$app" >/dev/null
+  tar --exclude="$app/logs" --exclude="$app/cache" -czf "$out/$app.tgz" -C config "$app"
+  [ -n "$was_running" ] && docker compose start "$app" >/dev/null
+done
 
-# Plex (named volume) — skip the regenerable cache
-vol="${COMPOSE_PROJECT_NAME:-mediastack}_plex_config"
-docker volume inspect "$vol" >/dev/null 2>&1 || { echo "volume $vol not found (set COMPOSE_PROJECT_NAME?)" >&2; exit 1; }
-docker compose stop plex >/dev/null
-docker run --rm -v "$vol":/src:ro -v "$(realpath "$out")":/out alpine \
-  tar --exclude='./Library/Application Support/Plex Media Server/Cache' -czf /out/plex.tgz -C /src .
-docker compose start plex >/dev/null
+# Media servers (named volumes): whichever exist. Skip regenerable caches.
+project="${COMPOSE_PROJECT_NAME:-mediastack}"
+found=
+for server in plex jellyfin emby; do
+  vol="${project}_${server}_config"
+  docker volume inspect "$vol" >/dev/null 2>&1 || continue
+  found=1
+  case $server in
+    plex) skip='./Library/Application Support/Plex Media Server/Cache' ;;
+    *)    skip='./cache' ;;
+  esac
+  was_running=; running "$server" && was_running=1 && docker compose stop "$server" >/dev/null
+  docker run --rm -v "$vol":/src:ro -v "$(realpath "$out")":/out alpine \
+    tar --exclude="$skip" -czf "/out/$server.tgz" -C /src .
+  [ -n "$was_running" ] && docker compose start "$server" >/dev/null
+done
+[ -n "$found" ] || { echo "no media server volume found (${project}_plex_config etc.; set COMPOSE_PROJECT_NAME?)" >&2; exit 1; }
 
 # your settings (contains secrets — keep the backup dir private)
 cp .env "$out/env" 2>/dev/null || true

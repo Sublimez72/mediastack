@@ -25,9 +25,26 @@ sonarr:
 
     quality_profiles:
       # WEB-DL 1080p, upgrades to Bluray 1080p. Sensible size per episode.
-      - trash_id: 9d142234e45d6143785ac55f5a9e8dc9  # WEB-1080p (Alternative)
+      # Named explicitly because WEB-720p below reuses the same trash_id.
+      - name: WEB-1080p (Alternative)
+        trash_id: 9d142234e45d6143785ac55f5a9e8dc9
         reset_unmatched_scores:
           enabled: true
+      # 720p only: WEB-DL 720p, with Bluray/HDTV 720p as fallbacks. Same
+      # TRaSH custom formats and scores as WEB-1080p, about half the size.
+      # Pick it per series in Sonarr, or per request in Seerr.
+      - name: WEB-720p
+        trash_id: 9d142234e45d6143785ac55f5a9e8dc9
+        reset_unmatched_scores:
+          enabled: true
+        qualities:
+          - name: WEB 720p
+            qualities: [WEBDL-720p, WEBRip-720p]
+          - name: Bluray-720p
+          - name: HDTV-720p
+        upgrade:
+          allowed: true
+          until_quality: WEB 720p
       # Anime: dual audio / fansub tiers, up to Remux 1080p
       - trash_id: 20e0fc959f1f1704bed501f23bdae76f  # [Anime] Remux-1080p
         reset_unmatched_scores:

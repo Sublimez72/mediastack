@@ -84,6 +84,9 @@ def _misc(ctx, sab, wanted):
 
 
 def _categories(ctx, sab, wanted):
+    # SABnzbd adds its default categories (tv, movies...) the first time anything
+    # lists them, overwriting ours. get_cats makes that happen before we write.
+    sab.call("get_cats")
     have = {c["name"]: c for c in sab.config("categories")}
     for name, path in wanted.items():
         cur = have.get(name)

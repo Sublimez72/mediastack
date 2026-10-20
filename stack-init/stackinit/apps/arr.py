@@ -2,13 +2,15 @@
 import re
 
 from ..common import CONFIG, Api, Ctx, Log, wait_for
+from . import sabnzbd
 
 ARRS = {
     "sonarr": {"port": 8989, "api": "v3", "category_field": "tvCategory"},
     "radarr": {"port": 7878, "api": "v3", "category_field": "movieCategory"},
     "prowlarr": {"port": 9696, "api": "v1"},
 }
-QBIT_NAME = "qBittorrent"   # decluttarr matches download clients by this name
+QBIT_NAME = "qBittorrent"   # decluttarr matches download clients by these names
+SAB_NAME = "SABnzbd"
 
 
 def api_key(app: str) -> str | None:
@@ -72,15 +74,23 @@ def configure(ctx: Ctx, app: str):
     cfg = ctx.cfg[app]
     ensure_auth(ctx, app, api)
     _root_folders(ctx, app, api, cfg["root_folders"])
-    _download_client(ctx, app, api, cfg["category"])
+    cat_field = ARRS[app]["category_field"]
+    _download_client(ctx, app, api, "QBittorrent", QBIT_NAME,
+                     {"host": "gluetun", "port": 8080, "useSsl": False, "username": ctx.user,
+                      cat_field: cfg["category"]},
+                     {"password": ctx.password}, refresh=ctx.password_changed)
+    _usenet_client(ctx, app, api, cfg)
     if cfg.get("remove_remote_path_mappings"):
         for m in api.get("/remotepathmapping"):
             ctx.apply(f"{app}: remove remote path mapping {m['remotePath']} -> {m['localPath']}",
                       lambda m=m: api.delete(f"/remotepathmapping/{m['id']}"))
     _patch(ctx, app, api, "/config/mediamanagement", cfg.get("media_management", {}), "media management")
+    delay = dict(cfg.get("delay_profile", {}))
+    if "sabnzbd" in ctx.keys and (ctx.cfg.get("sabnzbd") or {}).get("prefer_usenet", True):
+        delay["preferredProtocol"] = "usenet"
     for dp in api.get("/delayprofile"):
         if dp.get("order") == 2147483647:   # the default profile
-            _patch_obj(ctx, app, api, f"/delayprofile/{dp['id']}", dp, cfg.get("delay_profile", {}), "delay profile")
+            _patch_obj(ctx, app, api, f"/delayprofile/{dp['id']}", dp, delay, "delay profile")
 
 
 def _root_folders(ctx, app, api, wanted):
@@ -90,27 +100,43 @@ def _root_folders(ctx, app, api, wanted):
             ctx.apply(f"{app}: add root folder {path}", lambda p=path: api.post("/rootfolder", json={"path": p}))
 
 
-def _download_client(ctx, app, api, category):
-    cat_field = ARRS[app]["category_field"]
-    want = {"host": "gluetun", "port": 8080, "useSsl": False, "username": ctx.user, cat_field: category}
-    existing = [c for c in api.get("/downloadclient") if c["implementation"] == "QBittorrent"]
+def _download_client(ctx, app, api, impl, name, want, secrets, refresh=False):
+    """Create or fix the download client `impl`. `secrets` are only sent when
+    something changed (the *arr API masks them), or when `refresh` is set."""
+    existing = [c for c in api.get("/downloadclient") if c["implementation"] == impl]
     if existing:
         dc = existing[0]
         cur = field_map(dc)
         drift = {k: v for k, v in want.items() if differs(cur.get(k), v)}
         flags_ok = dc.get("enable") and dc.get("removeCompletedDownloads") and dc.get("removeFailedDownloads") \
-            and dc["name"] == QBIT_NAME
-        if not drift and flags_ok and not ctx.password_changed:
+            and dc["name"] == name
+        if not drift and flags_ok and not refresh:
             return
-        why = ", ".join(f"{k}={v}" for k, v in drift.items()) or "flags/password"
+        why = ", ".join(f"{k}={v}" for k, v in drift.items()) or "flags/secret"
         method, path = "PUT", f"/downloadclient/{dc['id']}"
     else:
-        dc = next(s for s in api.get("/downloadclient/schema") if s["implementation"] == "QBittorrent")
+        dc = next(s for s in api.get("/downloadclient/schema") if s["implementation"] == impl)
         why, method, path = "new", "POST", "/downloadclient"
-    set_fields(dc, {**want, "password": ctx.password})
-    dc.update(name=QBIT_NAME, enable=True, removeCompletedDownloads=True, removeFailedDownloads=True)
-    ctx.apply(f"{app}: qBittorrent download client ({why})",
+    set_fields(dc, {**want, **secrets})
+    dc.update(name=name, enable=True, removeCompletedDownloads=True, removeFailedDownloads=True)
+    ctx.apply(f"{app}: {name} download client ({why})",
               lambda: api.req(method, path, params={"forceSave": "true"}, json=dc))
+
+
+def _usenet_client(ctx, app, api, cfg):
+    """SABnzbd when the usenet profile is on; remove the one we added when it's off."""
+    if "sabnzbd" in ctx.keys:
+        category = cfg.get("usenet_category", "tv" if app == "sonarr" else "movies")
+        _download_client(ctx, app, api, "Sabnzbd", SAB_NAME,
+                         {"host": "sabnzbd", "port": 8080, "useSsl": False, ARRS[app]["category_field"]: category},
+                         {"apiKey": ctx.keys["sabnzbd"]})
+        return
+    if sabnzbd.enabled():
+        return  # profile on but SABnzbd unreachable: keep the client, it's retried next run
+    for dc in api.get("/downloadclient"):
+        if dc["implementation"] == "Sabnzbd" and field_map(dc).get("host") == "sabnzbd":
+            ctx.apply(f"{app}: remove {dc['name']} download client (usenet profile is off)",
+                      lambda dc=dc: api.delete(f"/downloadclient/{dc['id']}"))
 
 
 def _patch(ctx, app, api, path, wanted, label):

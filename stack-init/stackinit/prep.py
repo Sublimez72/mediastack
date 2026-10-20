@@ -2,10 +2,12 @@
 import base64
 import hashlib
 import os
+import secrets
 
+from .apps import sabnzbd
 from .common import CONFIG, DATA, Log, chown, load_credentials, load_stack_config, save_credentials, write_private
 
-APP_DIRS = ["sonarr", "radarr", "prowlarr", "bazarr", "qbittorrent", "seerr", "tautulli",
+APP_DIRS = ["sonarr", "radarr", "prowlarr", "bazarr", "qbittorrent", "sabnzbd", "seerr", "tautulli",
             "recyclarr", "decluttarr", "tailscale", "stack"]
 
 
@@ -31,6 +33,10 @@ def run():
     Log.section("qbittorrent")
     _seed_qbittorrent(user, applied or password, cfg)
 
+    if sabnzbd.enabled():
+        Log.section("sabnzbd")
+        _seed_sabnzbd(user, applied or password, cfg)
+
 
 def _data_dirs(cfg):
     dirs = set(cfg["paths"].values())
@@ -38,6 +44,10 @@ def _data_dirs(cfg):
     for app in ("sonarr", "radarr"):
         dirs.update(cfg[app]["root_folders"])
         dirs.add(cfg[app].get("media_management", {}).get("recycleBin") or "")
+    if sabnzbd.enabled():
+        sab = cfg.get("sabnzbd") or {}
+        dirs.update((sab.get("categories") or {}).values())
+        dirs.update(str(v) for k, v in (sab.get("misc") or {}).items() if k.endswith("_dir"))
     return sorted(d for d in dirs if d.startswith("/data/"))
 
 
@@ -75,3 +85,25 @@ def _seed_qbittorrent(user, password, cfg):
     ]))
     chown(conf.parent)
     Log.change("seeded qBittorrent.conf with the admin login")
+
+
+def _seed_sabnzbd(user, password, cfg):
+    """Same idea for SABnzbd: known login and API key, and an answer to the
+    hostname "sabnzbd" (it refuses unknown hostnames). Rest goes over the API."""
+    if sabnzbd.INI.exists():
+        Log.info("sabnzbd.ini exists, leaving it to the API step")
+        return
+    misc = (cfg.get("sabnzbd") or {}).get("misc") or {}
+    write_private(sabnzbd.INI, "\n".join([
+        "[misc]",
+        f"api_key = {secrets.token_hex(16)}",
+        f"nzb_key = {secrets.token_hex(16)}",
+        "host_whitelist = sabnzbd,",
+        f"username = {user}",
+        f"password = {password}",
+        f"download_dir = {misc.get('download_dir', '/data/usenet/incomplete')}",
+        f"complete_dir = {misc.get('complete_dir', '/data/usenet/complete')}",
+        "",
+    ]))
+    chown(sabnzbd.INI.parent)
+    Log.change("seeded sabnzbd.ini with the admin login and an API key")

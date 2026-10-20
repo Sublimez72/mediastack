@@ -16,3 +16,4 @@ services:
   plex: { ports: !reset [] }
   tautulli: { ports: !reset [] }
   seerr: { ports: !reset [] }
+  sabnzbd: { ports: !reset [] }

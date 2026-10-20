@@ -10,6 +10,7 @@ Plex + the *arr stack in one `docker compose up`. Everything is already wired to
 | **Sonarr / Radarr** | find, grab, rename and import TV / movies |
 | **Prowlarr + FlareSolverr** | indexers, synced to Sonarr/Radarr |
 | **qBittorrent + gluetun** | downloads, only ever through your VPN |
+| **SABnzbd** *(optional)* | Usenet downloads, see [Usenet](#usenet-optional) |
 | **Bazarr** | subtitles |
 | **recyclarr** | keeps quality profiles in line with TRaSH, daily |
 | **decluttarr** | clears stalled / failed / slow downloads |
@@ -167,6 +168,7 @@ Add `flaresolverr: true` inside the braces for Cloudflare-protected sites. Then 
 ```
  ${MEDIA_ROOT}  ──►  /data   (one mount for everything → instant hardlink imports)
    ├── downloads/{radarr,tv-sonarr}   qBittorrent saves here, by category
+   ├── usenet/complete/{movies,tv}    SABnzbd saves here (only with Usenet on)
    ├── movies/                        Radarr library  ─┐
    ├── tv/                            Sonarr library  ─┴─► Plex libraries
    └── .recycle/                      deleted files wait here 14 days
@@ -178,6 +180,7 @@ Add `flaresolverr: true` inside the braces for Cloudflare-protected sites. Then 
    - **Sonarr/Radarr:** root folders, download client, media management, recycle bin, delay profile and Plex library updates.
    - **Prowlarr:** sync to Sonarr/Radarr and FlareSolverr. Indexers are yours to add (Quick start step 8).
    - **qBittorrent:** categories and seeding limits.
+   - **SABnzbd** (if Usenet is on): login, folders, categories, safety settings and your provider.
    - **Bazarr:** Sonarr/Radarr connections, language profile and providers.
    - **Plex:** libraries.
    - **Seerr:** admin account, Plex and Sonarr/Radarr defaults, with no setup wizard.
@@ -239,6 +242,35 @@ docker compose up -d
 ```
 
 Settings you change in an app's UI stay as they are, unless `stack.yml` manages that same setting.
+
+## Usenet (optional)
+
+Usenet is a paid alternative to torrents: downloads are usually faster and complete, and nothing is uploaded. You need two things:
+
+- **A Usenet provider** (the servers you download from), for example Newshosting, Eweka, Frugal Usenet or UsenetExpress. It's a monthly or yearly subscription.
+- **At least one Usenet indexer** (the sites that list what's on those servers), for example NZBgeek, DrunkenSlug or NZBFinder. Most cost a few dollars a year.
+
+Turn it on by adding these lines to `.env`, with your provider's details:
+
+```ini
+COMPOSE_PROFILES=usenet
+USENET_HOST=news.yourprovider.com
+USENET_USERNAME=your-username
+USENET_PASSWORD=your-password
+```
+
+Optional: `USENET_PORT` (default `563`, SSL) and `USENET_CONNECTIONS` (default `8`; set it to what your plan allows). Already using `COMPOSE_PROFILES` for remote access? List both, separated by a comma: `COMPOSE_PROFILES=usenet,tailscale`.
+
+Then run `docker compose up -d`. stack-init sets up SABnzbd with your provider and adds it to Sonarr and Radarr as a second download client. Then:
+
+1. Add your Usenet indexer in Prowlarr, the same way as in [step 8](#8-add-indexers). Prowlarr passes it on to Sonarr and Radarr.
+2. SABnzbd is at <http://localhost:8085>, with the same login as every other app. You don't need to change anything there.
+
+When a release exists on both, Sonarr and Radarr pick the Usenet one. To keep preferring torrents, set `sabnzbd: { prefer_usenet: false }` in `local/stack.yml`.
+
+SABnzbd isn't routed through the VPN: its connection to your provider is SSL-encrypted, and unlike torrents, nobody else can see what you download. It aborts downloads that are password-protected or contain programs instead of video, so Sonarr/Radarr move on to another release.
+
+To turn Usenet off again, remove `usenet` from `COMPOSE_PROFILES`, run `docker compose rm -sf sabnzbd` to stop it, then `docker compose up -d`. stack-init removes SABnzbd from Sonarr and Radarr.
 
 ## Remote access to Seerr
 
@@ -333,6 +365,7 @@ Seerr, Tautulli and Plex stop for a few seconds during the copy, so their databa
 
 - **What did setup do / what failed?** `docker compose logs stack-init`. Fix the cause, then `docker compose up -d` to re-run it.
 - **qBittorrent unreachable.** The VPN isn't up: check `docker compose logs gluetun`.
+- **Usenet downloads fail straight away.** Check the provider details in `.env`, then open SABnzbd → Config → Servers and click **Test Server**. `docker compose logs sabnzbd` shows the error.
 - **The Plex claim code expired** (Seerr shows "unhealthy", and the stack-init log says Plex is not claimed). Plex only tries the code once, when its container is first created. To retry:
   1. Get a fresh code at <https://plex.tv/claim> and replace the `PLEX_CLAIM=` value in `.env`.
   2. Straight away, recreate Plex so it tries again:

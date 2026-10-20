@@ -70,7 +70,12 @@ radarr:
       - trash_id: d1d67249d3890e49bc12e275d989a7e9  # HD Bluray + WEB
         reset_unmatched_scores:
           enabled: true
-      # 4K remux/WEB with 1080p fallback. Big files — opt in per movie.
+      # 4K WEB-DL only. Streaming-service 4K at a fraction of remux size.
+      # Pick it per movie in Radarr, or per request in Seerr.
+      - trash_id: 0537bd27bcf8da604f30a862343b1742  # WEB 2160p
+        reset_unmatched_scores:
+          enabled: true
+      # 4K remux, or 4K WEB-DL until a remux shows up. Big files — opt in per movie.
       - trash_id: fd161a61e3ab826d3a22d53f935696dd  # Remux + WEB 2160p
         reset_unmatched_scores:
           enabled: true

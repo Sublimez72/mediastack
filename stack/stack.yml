@@ -161,7 +161,7 @@ seerr:
   # it's switched on, else Jellyfin, else Emby. Or set plex / jellyfin / emby.
   media_server: auto
   radarr:
-    profile: HD Bluray + WEB
+    profile: HD Bluray + WEB             # or WEB 2160p / Remux + WEB 2160p for 4K
     root_folder: /data/movies
     minimum_availability: released
   sonarr:

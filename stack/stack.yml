@@ -12,6 +12,7 @@ paths:
 sonarr:
   root_folders: [/data/tv]
   category: tv-sonarr
+  usenet_category: tv                     # SABnzbd category (only with COMPOSE_PROFILES=usenet)
   remove_remote_path_mappings: true      # not needed with a single /data mount
   media_management:
     copyUsingHardlinks: true
@@ -29,6 +30,7 @@ sonarr:
 radarr:
   root_folders: [/data/movies]
   category: radarr
+  usenet_category: movies                 # SABnzbd category (only with COMPOSE_PROFILES=usenet)
   remove_remote_path_mappings: true
   media_management:
     copyUsingHardlinks: true
@@ -69,6 +71,26 @@ qbittorrent:
     dont_count_slow_torrents: true
     bypass_local_auth: true              # lets gluetun push the forwarded port (localhost only)
     upnp: false                          # port comes from the VPN, not your router
+
+# Usenet (optional): set COMPOSE_PROFILES=usenet and USENET_* in .env.
+# Your provider is added from .env; Usenet indexers are added in Prowlarr like
+# any other and synced to Sonarr/Radarr.
+sabnzbd:
+  prefer_usenet: true                    # Sonarr/Radarr grab the Usenet release when both exist
+  categories:                            # category -> folder; names must match usenet_category above
+    tv: /data/usenet/complete/tv
+    movies: /data/usenet/complete/movies
+  # Any SABnzbd setting from its [misc] section (Config > Special shows them all)
+  misc:
+    download_dir: /data/usenet/incomplete
+    complete_dir: /data/usenet/complete   # same /data mount as the library: imports are instant moves
+    pause_on_pwrar: 2                    # abort password-protected jobs so Sonarr/Radarr pick another release
+    action_on_unwanted_extensions: 2     # abort jobs that contain programs instead of video
+    unwanted_extensions: [exe, com, bat, cmd, scr, pif, msi, lnk, vbs, vbe, js, jse, jar, ps1, reg, hta, cpl, wsf]
+    deobfuscate_final_filenames: true
+    direct_unpack: false                 # TRaSH: unpacking while downloading causes more failures than it saves
+    history_retention_option: all        # Sonarr/Radarr read the history to import
+  server: {}                             # extra provider settings, e.g. { retention: 3000 }
 
 prowlarr:
   # No indexers ship with this repo — add your own (README > Adding indexers),

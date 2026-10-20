@@ -2,7 +2,7 @@
 import os
 import traceback
 
-from .apps import arr, bazarr, generated, plex, prowlarr, qbittorrent, seerr, tautulli
+from .apps import arr, bazarr, generated, plex, prowlarr, qbittorrent, sabnzbd, seerr, tautulli
 from .common import Ctx, Log, save_credentials
 
 UIS = [("Seerr (requests)", 5055), ("Sonarr", 8989), ("Radarr", 7878), ("Prowlarr", 9696),
@@ -15,6 +15,7 @@ def run(dry_run=False) -> int:
         print("DRY RUN — nothing will be changed")
 
     steps = [
+        lambda: sabnzbd.configure(ctx),         # before Sonarr/Radarr, which need its API key
         lambda: arr.configure(ctx, "sonarr"),
         lambda: arr.configure(ctx, "radarr"),
         lambda: prowlarr.configure(ctx),
@@ -57,7 +58,8 @@ def _summary(ctx):
     host = os.environ.get("BIND_ADDR", "127.0.0.1")
     host = "localhost" if host in ("127.0.0.1", "0.0.0.0") else host
     print("\nweb UIs (login: user/password in config/stack/credentials.env):")
-    for name, port in UIS:
+    uis = UIS + [("SABnzbd (Usenet)", 8085)] if sabnzbd.enabled() else UIS
+    for name, port in uis:
         print(f"  {name:<18} http://{host}:{port}")
     print("  Plex               https://app.plex.tv")
     print("=" * 60)

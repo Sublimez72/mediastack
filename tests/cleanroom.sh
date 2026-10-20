@@ -11,6 +11,7 @@ VPN_SERVICE_PROVIDER=test
 WIREGUARD_PRIVATE_KEY=test
 COMPOSE_PATH_SEPARATOR=:
 COMPOSE_FILE=compose.yml:tests/compose.test.yml
+COMPOSE_PROFILES=usenet
 ENV
 cd "$work"
 docker compose -p mstest up -d --build || true

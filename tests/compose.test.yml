@@ -17,3 +17,5 @@ services:
   tautulli: { ports: !reset [] }
   seerr: { ports: !reset [] }
   sabnzbd: { ports: !reset [] }
+  jellyfin: { ports: !reset [] }
+  emby: { ports: !reset [] }

@@ -20,7 +20,7 @@ x-stack-init: &stack-init
     ADMIN_USER: ${ADMIN_USER:-admin}
     ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
     PLEX_CLAIM: ${PLEX_CLAIM:-}
-    PLEX_SERVER_NAME: ${PLEX_SERVER_NAME:-mediastack}
+    SERVER_NAME: ${SERVER_NAME:-${PLEX_SERVER_NAME:-mediastack}}
     OPENSUBTITLES_USERNAME: ${OPENSUBTITLES_USERNAME:-}
     OPENSUBTITLES_PASSWORD: ${OPENSUBTITLES_PASSWORD:-}
     BIND_ADDR: ${BIND_ADDR:-127.0.0.1}
@@ -58,9 +58,12 @@ services:
       prowlarr: { condition: service_healthy }
       bazarr: { condition: service_healthy }
       seerr: { condition: service_started }
-      plex: { condition: service_started }
       flaresolverr: { condition: service_started }
       sabnzbd: { condition: service_healthy, required: false }   # only with the usenet profile
+      # Media servers: whichever are switched on (README > Choose your media servers).
+      plex: { condition: service_started, required: false }
+      jellyfin: { condition: service_started, required: false }
+      emby: { condition: service_started, required: false }
 
   # ---------------------------------------------------------------- downloads
   gluetun:
@@ -230,11 +233,14 @@ services:
     depends_on:
       stack-init: { condition: service_completed_successfully }
 
-  # -------------------------------------------------------------------- plex
+  # ----------------------------------------------------------- media servers
+  # Plex is on by default; Jellyfin and Emby are switched on with
+  # COMPOSE_PROFILES=jellyfin / emby / jellyfin,emby. All of them read the same
+  # libraries under /data. Turn Plex off with compose.no-plex.yml.
   plex:
     <<: *defaults
     image: plexinc/pms-docker:latest
-    hostname: mediastack       # display name is set by stack-init from PLEX_SERVER_NAME
+    hostname: mediastack       # display name is set by stack-init from SERVER_NAME
     environment:
       TZ: ${TZ:-UTC}
       PLEX_UID: ${PUID:-1000}
@@ -248,6 +254,28 @@ services:
       - /transcode
     ports:
       - 32400:32400
+
+  jellyfin:
+    <<: *defaults
+    profiles: [jellyfin]
+    image: lscr.io/linuxserver/jellyfin:latest
+    environment: *env
+    volumes:
+      - jellyfin_config:/config    # named volume: SQLite is unsafe on Windows bind mounts
+      - ${MEDIA_ROOT:-./library}:/data
+    ports:
+      - 8096:8096
+
+  emby:
+    <<: *defaults
+    profiles: [emby]
+    image: lscr.io/linuxserver/emby:latest
+    environment: *env
+    volumes:
+      - emby_config:/config
+      - ${MEDIA_ROOT:-./library}:/data
+    ports:
+      - 8097:8096                  # 8096 is Jellyfin's, so Emby moves on the host side
 
   tautulli:
     <<: *defaults
@@ -313,3 +341,5 @@ networks:
 
 volumes:
   plex_config:
+  jellyfin_config:
+  emby_config:

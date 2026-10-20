@@ -3,6 +3,7 @@ import copy
 import hashlib
 import os
 import secrets
+import socket
 import time
 from pathlib import Path
 
@@ -48,6 +49,7 @@ class Ctx:
         self.cfg = load_stack_config()
         self.keys: dict[str, str] = {}       # app -> api key
         self.plex: dict | None = None        # token, machine id, name
+        self.media: dict[str, dict] = {}     # jellyfin/emby -> api key, user, name
         self.user, self.password, self.password_changed, self.previous_password = load_credentials()
         self.changes = 0
 
@@ -192,6 +194,19 @@ def wait_for(url: str, timeout=300, ok=lambda r: r.status_code < 500) -> bool:
             pass
         time.sleep(3)
     return False
+
+
+def server_name() -> str:
+    return os.environ.get("SERVER_NAME") or os.environ.get("PLEX_SERVER_NAME") or "mediastack"
+
+
+def enabled(service: str) -> bool:
+    """Is this compose service switched on? Services left out by a profile have no DNS name."""
+    try:
+        socket.gethostbyname(service)
+        return True
+    except OSError:
+        return False
 
 
 def reachable(url: str) -> bool:
